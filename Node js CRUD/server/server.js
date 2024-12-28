@@ -27,7 +27,7 @@ const server = http.createServer((req, res) => {
       const newItem = JSON.parse(body);
       const items = readData();
 
-      newItem.id = items.length ? items[items.length - 1].id + 1 : 1; // Auto-increment ID
+      newItem.id = items.length ? items[items.length - 1].id + 1 : 1;
       items.push(newItem);
       writeData(items);
 
