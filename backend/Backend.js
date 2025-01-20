@@ -10,11 +10,11 @@ const app = express();
 const PORT = 3005;
 const JWT_SECRET = "iamsuryasinghamernstackdevelopersince2023andilovetodocode";
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "practice",
-  password: "2119",
-  port: 5432,
+  user: "avnadmin",
+  host: "pg-10045fdf-hrjayasuryasingh-40eb.l.aivencloud.com",
+  database: "defaultdb",
+  password: "AVNS_vV-Zf1C3zUr0yxgAQDx",
+  port: 27090,
 });
 
 app.use(express.json());
