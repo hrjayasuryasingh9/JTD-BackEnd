@@ -6,7 +6,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 const fs = require("fs");
-const cors = require("cors");
+
 
 const url = require("url");
 const { waitForDebugger } = require("inspector");
