@@ -6,8 +6,11 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 const fs = require("fs");
+const cors = require("cors");
 
 const url = require("url");
+const { waitForDebugger } = require("inspector");
+const { title } = require("process");
 
 const config = {
   user: "avnadmin",
@@ -66,7 +69,6 @@ pool.connect((err, client, release) => {
 const app = express();
 const PORT = 3005;
 const JWT_SECRET = "iamsuryasinghamernstackdevelopersince2023andilovetodocode";
-
 app.use(express.json());
 
 app.post("/registration", async (req, res) => {
@@ -127,11 +129,110 @@ app.post("/login", async (req, res) => {
     const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, {
       expiresIn: "24h",
     });
-    res.json({ token });
+    res.json({ role: role });
   } catch (error) {
     res.status(500).json({ message: "Internal server error" });
   }
 });
+// admin crud start
+app.get("/rentals", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT ROW_NUMBER() OVER () AS row_number,users.id, users.username,books.title, books.id AS book_id, rentals.rented_on FROM users INNER JOIN rentals ON users.id = rentals.user_id INNER JOIN books ON rentals.book_id = books.id WHERE users.role = 'customers';`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+app.post("/rentals/add", async (req, res) => {
+  const { userid, bookid } = req.body;
+  try {
+    pool.query(`insert into rentals values(default,${userid},${bookid});`);
+    res.json({ message: "added the rental succesfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+app.delete("/rentals/delete", async (req, res) => {
+  const { userid, bookid } = req.body;
+  try {
+    pool.query(
+      ` delete from rentals where user_id=${userid} and book_id=${bookid};`
+    );
+    res.json({ message: "the rental is deleted " });
+  } catch (error) {
+    res.status(200).json({ messge: "error has occured" });
+  }
+});
+app.get("/books", async (req, res) => {
+  try {
+    const results = await pool.query(
+      `SELECT books.id AS book_id, books.title, books.author, CASE WHEN rentals.book_id IS NULL THEN 'Available' ELSE 'Not Available' END AS availability FROM books LEFT JOIN rentals ON books.id = rentals.book_id order by book_id;`
+    );
+    res.json(results.rows);
+  } catch (error) {
+    res.status(200).json({ message: "Error occured in the server" });
+  }
+});
+
+app.post("/books/add", async (req, res) => {
+  const { name, author } = req.body;
+  try {
+    await pool.query("INSERT INTO books VALUES (default,$1, $2)", [
+      name,
+      author,
+    ]);
+    res.json({ message: "Added a book successfully" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "An error has occurred on the server side" });
+  }
+});
+
+app.delete("/books/delete", async (req, res) => {
+  const { name } = req.body;
+  try {
+    pool.query("delete from books where title= $1", [name]);
+    res.json({ messgae: "deleted a book successfully" });
+  } catch (error) {
+    res
+      .status(200)
+      .json({ message: "the error has occured at the server side" });
+  }
+});
+
+// end of admins crud
+
+// customer crud starts here
+
+app.get("/mybooks/:name", async (req, res) => {
+  const name = req.params.name;
+  try {
+    const result = await pool.query(
+      `SELECT 
+         ROW_NUMBER() OVER () AS book_number,  
+         books.title as book_name, 
+         books.id as book_id, 
+         rentals.rented_on 
+       FROM users 
+       INNER JOIN rentals ON users.id = rentals.user_id 
+       INNER JOIN books ON rentals.book_id = books.id 
+       WHERE users.username = $1;`,
+      [name]
+    );
+    res.status(202).json(result.rows);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "An error has occurred on the server side" }); 
+  }
+});
+
+// customer crud ends here
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
@@ -170,3 +271,4 @@ app.get("/user", authenticateToken, (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
+
