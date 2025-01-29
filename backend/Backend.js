@@ -6,7 +6,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 const fs = require("fs");
-
+const cors = require("cors");
 
 const url = require("url");
 const { waitForDebugger } = require("inspector");
@@ -138,7 +138,7 @@ app.post("/login", async (req, res) => {
 app.get("/rentals", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT ROW_NUMBER() OVER () AS row_number,users.id, users.username,books.title, books.id AS book_id, rentals.rented_on FROM users INNER JOIN rentals ON users.id = rentals.user_id INNER JOIN books ON rentals.book_id = books.id WHERE users.role = 'customers';`
+      ` SELECT ROW_NUMBER() OVER () AS row_number, users.id, users.username, books.title, books.id AS book_id, rentals.rented_on, rentals.due_date, rentals.quantity_rented, books.price as price_per_book, books.quantity_available FROM users INNER JOIN rentals ON users.id = rentals.user_id INNER JOIN books ON rentals.book_id = books.id WHERE users.role = 'customers';`
     );
     res.json(result.rows);
   } catch (error) {
@@ -146,14 +146,26 @@ app.get("/rentals", async (req, res) => {
   }
 });
 app.post("/rentals/add", async (req, res) => {
-  const { userid, bookid } = req.body;
+  const { user_id, book_id, quantity_rented, due_date } = req.body;
+
   try {
-    pool.query(`insert into rentals values(default,${userid},${bookid});`);
-    res.json({ message: "added the rental succesfully" });
+    await pool.query(
+      `INSERT INTO rentals (user_id, book_id, quantity_rented, due_date) VALUES ($1, $2, $3, $4)`,
+      [user_id, book_id, quantity_rented, due_date]
+    );
+
+    await pool.query(
+      `UPDATE books SET quantity_available = quantity_available - $1 WHERE id = $2`,
+      [quantity_rented, book_id]
+    );
+
+    res.json({ message: "Rental added successfully" });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal server error" });
   }
 });
+
 app.delete("/rentals/delete", async (req, res) => {
   const { userid, bookid } = req.body;
   try {
@@ -168,21 +180,22 @@ app.delete("/rentals/delete", async (req, res) => {
 app.get("/books", async (req, res) => {
   try {
     const results = await pool.query(
-      `SELECT books.id AS book_id, books.title, books.author, CASE WHEN rentals.book_id IS NULL THEN 'Available' ELSE 'Not Available' END AS availability FROM books LEFT JOIN rentals ON books.id = rentals.book_id order by book_id;`
+      `SELECT books.id AS book_id, books.title, books.author, books.price as price_per_book, books.quantity_available FROM books LEFT JOIN rentals ON books.id = rentals.book_id ORDER BY book_id;`
     );
     res.json(results.rows);
   } catch (error) {
-    res.status(200).json({ message: "Error occured in the server" });
+    console.error(error);
+    res.status(500).json({ message: "Error occurred on the server" });
   }
 });
 
 app.post("/books/add", async (req, res) => {
-  const { name, author } = req.body;
+  const { name, author, price, available_quantity } = req.body;
   try {
-    await pool.query("INSERT INTO books VALUES (default,$1, $2)", [
-      name,
-      author,
-    ]);
+    await pool.query(
+      "INSERT INTO books (title, author,quantity_available,price) VALUES ($1, $2, $3, $4)",
+      [name, author, available_quantity, price]
+    );
     res.json({ message: "Added a book successfully" });
   } catch (error) {
     console.error(error);
@@ -212,15 +225,7 @@ app.get("/mybooks/:name", async (req, res) => {
   const name = req.params.name;
   try {
     const result = await pool.query(
-      `SELECT 
-         ROW_NUMBER() OVER () AS book_number,  
-         books.title as book_name, 
-         books.id as book_id, 
-         rentals.rented_on 
-       FROM users 
-       INNER JOIN rentals ON users.id = rentals.user_id 
-       INNER JOIN books ON rentals.book_id = books.id 
-       WHERE users.username = $1;`,
+      `SELECT ROW_NUMBER() OVER () AS book_number,books.title as book_name,books.id as book_id,rentals.rented_on,rentals.due_date,rentals.quantity_rented,books.price as price_per_book FROM users INNER JOIN rentals ON users.id = rentals.user_id INNER JOIN books ON rentals.book_id = books.id WHERE users.username=$1;`,
       [name]
     );
     res.status(202).json(result.rows);
@@ -228,7 +233,7 @@ app.get("/mybooks/:name", async (req, res) => {
     console.error(error);
     res
       .status(500)
-      .json({ message: "An error has occurred on the server side" }); 
+      .json({ message: "An error has occurred on the server side" });
   }
 });
 
@@ -271,4 +276,3 @@ app.get("/user", authenticateToken, (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
-
